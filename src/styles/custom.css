@@ -427,8 +427,51 @@ body {
 .reveal-delay-3 { transition-delay: 0.3s; }
 .reveal-delay-4 { transition-delay: 0.4s; }
 
-/* ─── Hero Animated Gradient ─────────────────────────────────────────────── */
+/* ─── Hero / Splash Page ────────────────────────────────────────────────── */
 
+/* Ambient glow behind hero logo */
+:root[data-theme='dark'] .hero img {
+  filter: drop-shadow(0 0 40px rgba(37, 99, 235, 0.25))
+          drop-shadow(0 0 80px rgba(34, 211, 238, 0.12))
+          drop-shadow(0 0 120px rgba(249, 115, 22, 0.08));
+  animation: hero-float 6s ease-in-out infinite;
+}
+
+:root[data-theme='light'] .hero img {
+  filter: drop-shadow(0 4px 24px rgba(37, 99, 235, 0.2))
+          drop-shadow(0 8px 48px rgba(34, 211, 238, 0.1));
+  animation: hero-float 6s ease-in-out infinite;
+}
+
+@keyframes hero-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+/* Hero title gradient text */
+.hero h1 {
+  background: linear-gradient(135deg, #F0F0F0 0%, #3B82F6 40%, #22D3EE 70%, #F97316 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+:root[data-theme='light'] .hero h1 {
+  background: linear-gradient(135deg, #0F172A 0%, #1d4ed8 40%, #0891B2 70%, #EA580C 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hero tagline */
+.hero .tagline {
+  max-width: 36rem;
+}
+
+/* Hero gradient background */
 .hero-gradient {
   background:
     radial-gradient(ellipse at var(--cursor-x, 50%) var(--cursor-y, 50%), rgba(37, 99, 235, 0.18) 0%, transparent 60%),
