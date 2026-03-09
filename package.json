@@ -9,6 +9,7 @@
     "preview": "astro preview",
     "astro": "astro"
   },
+  "packageManager": "pnpm@10.30.3",
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild", "sharp"]
   },
