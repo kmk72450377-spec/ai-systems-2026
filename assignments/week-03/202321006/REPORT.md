@@ -118,7 +118,10 @@ rules:
 
 ## 6. MCP 서버 검증 (Req 3)
 
-`mig_monitor_server.py`를 실행하여 획득한 `tools/list` 결과 (JSON-RPC):
+`mig_monitor_server.py`를 실행하여 획득한 `tools/list` 결과 (JSON-RPC) 및 실행 화면입니다:
+
+![MCP Verification 1](./mcp-verification-1.png)
+![MCP Verification 2](./mcp-verification-2.png)
 
 ```json
 {
