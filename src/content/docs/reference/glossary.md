@@ -60,6 +60,9 @@ description: AI 시스템 2026 강의 주요 용어 정의
 **Governance-as-Code**
 : 거버넌스 정책(누가 어떤 행동을 할 수 있는가)을 소프트웨어 코드로 구현하여 자동으로 강제하는 접근법.
 
+**Hook (훅)**
+: Claude Code에서 도구 호출, 세션 이벤트 등에 자동으로 실행되는 핸들러. 4종 타입(command/http/prompt/agent)이 있다. CLAUDE.md가 advisory(~80% 준수)인 반면, Hook은 deterministic(100% 시행)이다. settings.json에 정의.
+
 **Hard Interrupt**
 : 에이전트가 High Risk 작업(CUD)을 시도할 때 반드시 인간의 명시적 승인을 받아야 하는 강제 정지 메커니즘.
 
@@ -146,6 +149,9 @@ description: AI 시스템 2026 강의 주요 용어 정의
 
 **Sampling (MCP 서버 주도 추론 요청)**
 : MCP에서 서버가 클라이언트의 LLM에 추론을 요청하는 역방향 훅. 서버는 자체 모델 API 키 없이도 호스트의 LLM 지능을 활용할 수 있다. Human-on-the-Loop 원칙에 따라 사용자 승인이 필수이며, 클라이언트가 모델 선택과 토큰 제한을 제어한다.
+
+**Sign Fatigue (간판 피로)**
+: instruction 파일(PROMPT.md, CLAUDE.md)에 제약이 과다해져 에이전트가 핵심 지시를 놓치는 현상. Huntley의 Sign 메타포 확장 — 놀이터에 30개 경고판이 붙으면 아무도 읽지 않는 것과 같다. 인스트럭션 튜닝은 추가뿐 아니라 정리와 우선순위 재조정을 포함한다.
 
 **SDLC (Software Development Lifecycle)**
 : 소프트웨어 개발 생애주기. 요구사항 분석 → 설계 → 구현 → 테스트 → 배포 → 유지보수.
