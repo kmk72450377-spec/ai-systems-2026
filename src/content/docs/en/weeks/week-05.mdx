@@ -273,6 +273,47 @@ This pattern is a **higher-level abstraction** of the three state files in today
 
 ---
 
+### Persistent Knowledge Systems — The LLM Wiki Pattern
+
+While the Initializer pattern manages state for a single task, the **LLM Wiki pattern** accumulates knowledge across an entire project permanently. [Proposed by Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f), its core principle is "compile knowledge once, keep it current."
+
+**Architecture**:
+
+| Layer | Role | Example |
+|-------|------|---------|
+| **Raw Sources** | Immutable original materials | Paper PDFs, meeting recordings, codebases |
+| **Wiki** | LLM-generated and maintained markdown files | Summaries, cross-references, entity pages |
+| **Schema** | Configuration file defining structure and workflows | Wiki rules described in CLAUDE.md |
+
+**Three Operations**:
+1. **Ingest** — Read new source material, write summaries, update related wiki pages
+2. **Query** — Search the wiki to synthesize answers, file new discoveries back into the wiki
+3. **Lint** — Check for contradictions, stale information, orphaned pages, missing cross-references
+
+<Aside type="tip" title="Why LLMs Are Suited for Wiki Maintenance">
+Humans abandon knowledge systems because they tire of maintaining cross-references, verifying consistency, and updating multiple pages simultaneously. LLMs don't tire of this "bookkeeping" work. The human role shifts to **curation and direction-setting**.
+</Aside>
+
+This pattern is the evolutionary next step beyond the Initializer: 3 state files (single task) → JSON feature list (multi-feature project) → **Wiki (persistent knowledge graph)**. The ultimate form of context management is not re-understanding everything each session, but referencing accumulated knowledge.
+
+---
+
+### Knowledge Graph-Based Token Reduction — Graphify
+
+Instead of putting raw files directly into context, **transforming a codebase into a knowledge graph** and querying only the needed parts can dramatically reduce token consumption. [Graphify](https://github.com/safishamsi/graphify) is a practical implementation of this approach.
+
+**How it works**:
+- **Code analysis**: tree-sitter AST extraction parses classes, functions, imports, and call graphs locally (no LLM calls needed, code never leaves your machine)
+- **Document/media analysis**: Semantic extraction from PDFs, images, videos via LLM
+- **Graph construction**: NetworkX + Leiden clustering for community detection, interactive HTML visualization + JSON output
+- **Confidence tagging**: Relationships classified as EXTRACTED (confirmed), INFERRED (with confidence scores), or AMBIGUOUS
+
+**Token efficiency**: **71.5x** token reduction compared to reading raw files directly on mixed corpora. Once the graph is built, only incremental updates via SHA256 caching are needed.
+
+This approach can be combined with the LLM Wiki pattern: use Graphify to graph the codebase structure, then layer insights and decisions on top with an LLM Wiki.
+
+---
+
 ### Context Strategy Comparison by Tool
 
 Context management approaches differ by tool. As of 2026, three strategies are competing:
@@ -405,6 +446,8 @@ Measure context usage directly and compare before and after compaction to experi
 4. **Ralph's fresh context is best between loops** — use compaction inside a loop, full reset + state file handoff between loops.
 5. **40-70% of tokens are wasted** — cut costs with model routing (Haiku 60-70%), prompt caching (read at 0.1x), and keeping CLAUDE.md under 200 lines.
 6. **Initializer pattern** — manage state deterministically with a 2-phase structure: JSON feature list + claude-progress.txt + init.sh.
+7. **LLM Wiki pattern** — beyond per-session state files, an architecture where LLMs permanently maintain a knowledge wiki. Knowledge accumulates through Ingest → Query → Lint cycles.
+8. **Knowledge graph token reduction** — tools like Graphify that transform codebases into graphs achieve 71.5x token savings vs raw file reading.
 
 ## Further Reading
 
@@ -412,3 +455,5 @@ Measure context usage directly and compare before and after compaction to experi
 - [Anthropic: Prompt Caching Documentation](https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching) — Cache pricing, TTL, and usage
 - [SkillReducer (arXiv:2603.29919)](https://arxiv.org/abs/2603.29919) — The less-is-more effect: compressing tool descriptions improves quality
 - [Simon Willison: YAML vs Token-Saving Formats](https://simonwillison.net/) — 9,649 experiments showing familiar formats outperform
+- [Karpathy: LLM Wiki — Building Persistent Knowledge Systems](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — Pattern for LLMs maintaining persistent knowledge wikis
+- [Graphify](https://github.com/safishamsi/graphify) — Transform codebases/documents into knowledge graphs, tree-sitter AST + Leiden clustering, 71.5x token savings

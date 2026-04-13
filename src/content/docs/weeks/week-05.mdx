@@ -272,6 +272,47 @@ feature list를 Markdown이 아닌 **JSON으로 저장하는 이유**: 모델이
 
 ---
 
+### 영구 지식 시스템 — LLM Wiki 패턴
+
+Initializer 패턴이 단일 태스크의 상태를 관리한다면, **LLM Wiki 패턴**은 프로젝트 전체의 지식을 영구적으로 축적한다. [Karpathy가 제안한 이 패턴](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)의 핵심은 "지식을 한 번 정리하고, 최신 상태를 유지한다" (compile once, keep current)이다.
+
+**아키텍처**:
+
+| 계층 | 역할 | 예시 |
+|------|------|------|
+| **Raw Sources** | 불변 원본 자료 | 논문 PDF, 회의 녹취, 코드베이스 |
+| **Wiki** | LLM이 생성·유지하는 마크다운 파일 | 요약, 교차 참조, 엔티티 페이지 |
+| **Schema** | 구조와 워크플로우를 정의하는 설정 파일 | CLAUDE.md에 wiki 규칙 기술 |
+
+**3대 연산**:
+1. **Ingest** — 새 원본 자료를 읽고, 요약을 작성하고, 관련 wiki 페이지를 업데이트
+2. **Query** — 질문에 대해 wiki를 검색하여 답변을 합성하고, 새 발견을 다시 wiki에 기록
+3. **Lint** — 모순, 오래된 정보, 고아 페이지, 누락된 교차 참조를 점검
+
+<Aside type="tip" title="왜 LLM이 위키 관리에 적합한가">
+인간은 교차 참조 유지, 일관성 검증, 다중 페이지 동시 업데이트에 지치기 때문에 지식 시스템을 버린다. LLM은 이런 "북키핑" 작업에서 지치지 않는다. 인간의 역할은 **큐레이션과 방향 설정**으로 전환된다.
+</Aside>
+
+이 패턴은 Initializer의 상위 진화형이다: state file 3종(단일 태스크) → JSON feature list(다기능 프로젝트) → **Wiki(영구 지식 그래프)**. 컨텍스트 관리의 궁극적 형태는 세션마다 전체를 다시 파악하는 것이 아니라, 축적된 지식을 참조하는 것이다.
+
+---
+
+### 지식 그래프 기반 토큰 절감 — Graphify
+
+컨텍스트에 원본 파일을 그대로 넣는 대신, **코드베이스를 지식 그래프로 변환**하여 필요한 부분만 조회하면 토큰 소비를 극적으로 줄일 수 있다. [Graphify](https://github.com/safishamsi/graphify)는 이 접근법의 실전 구현체다.
+
+**동작 방식**:
+- **코드 분석**: tree-sitter AST 추출로 클래스, 함수, import, 호출 그래프를 로컬에서 파싱 (LLM 호출 불필요, 코드가 외부로 전송되지 않음)
+- **문서/미디어 분석**: PDF, 이미지, 동영상 등을 LLM으로 의미 추출
+- **그래프 구축**: NetworkX + Leiden 클러스터링으로 커뮤니티 탐지, 인터랙티브 HTML 시각화 + JSON 출력
+- **신뢰도 태깅**: 관계를 EXTRACTED(확정), INFERRED(추론, 점수 포함), AMBIGUOUS(모호)로 구분
+
+**토큰 효율**: 혼합 코퍼스에서 원본 파일 직접 읽기 대비 **71.5배** 토큰 절감. 한 번 그래프를 구축하면 SHA256 캐시로 증분 업데이트만 수행한다.
+
+이 접근법은 LLM Wiki 패턴과 결합할 수 있다: Graphify로 코드베이스의 구조를 그래프화하고, LLM Wiki로 그 위에 인사이트와 결정 사항을 축적한다.
+
+---
+
 ### 도구별 컨텍스트 전략 비교
 
 컨텍스트를 관리하는 접근법은 도구마다 다르다. 2026년 기준 세 가지 전략이 경쟁 중이다:
@@ -404,6 +445,8 @@ users[3]{id,name,email}:
 4. **Ralph의 fresh context가 루프 간 최선** — 루프 내부에서는 compaction, 루프 사이에서는 완전 초기화 + 상태 파일 전달.
 5. **토큰 40-70%가 낭비** — 모델 라우팅(Haiku 60-70%), prompt caching(read 0.1x), CLAUDE.md 200줄 이하로 절감.
 6. **Initializer 패턴** — JSON feature list + claude-progress.txt + init.sh 2-phase 구조로 상태를 결정론적으로 관리.
+7. **LLM Wiki 패턴** — 세션 단위 상태 파일을 넘어, LLM이 영구 지식 위키를 유지·관리하는 아키텍처. Ingest → Query → Lint 사이클로 지식을 축적.
+8. **지식 그래프 토큰 절감** — Graphify 같은 도구로 코드베이스를 그래프화하면 원본 대비 71.5배 토큰 절감 가능.
 
 ## 더 읽을거리
 
@@ -413,3 +456,5 @@ users[3]{id,name,email}:
 - [Simon Willison: YAML vs Token-Saving Formats](https://simonwillison.net/) — 9,649건 실험, 익숙한 형식이 우수
 - [Tam et al. "Let Me Speak Freely?" (arXiv:2408.02442)](https://arxiv.org/abs/2408.02442) — 포맷 제약이 LLM 추론 성능에 미치는 영향 (10-15% 저하)
 - [TOON Format Specification](https://github.com/toon-format/spec) — Token Oriented Object Notation, 균일 배열 토큰 최적화
+- [Karpathy: LLM Wiki — Building Persistent Knowledge Systems](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — LLM이 영구 지식 위키를 유지하는 패턴
+- [Graphify](https://github.com/safishamsi/graphify) — 코드베이스/문서를 지식 그래프로 변환, tree-sitter AST + Leiden 클러스터링, 71.5x 토큰 절감

@@ -218,6 +218,32 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="token")
 
 ---
 
+### Graphify
+
+An AI coding assistant skill that transforms codebases and documents into queryable knowledge graphs. Analyzes code structure using tree-sitter AST extraction (23 languages, no LLM calls needed), then builds community detection and interactive visualizations with NetworkX + Leiden clustering.
+
+```bash
+# Install
+pip install graphify-ai
+
+# Build codebase graph
+graphify build ./src --output graph.json
+
+# Generate interactive visualization
+graphify visualize graph.json --output graph.html
+```
+
+**Key features**:
+- tree-sitter based local AST analysis (code never leaves your machine)
+- **71.5x** token reduction on mixed corpora vs raw file reading
+- Confidence tagging: EXTRACTED / INFERRED / AMBIGUOUS
+- SHA256 cache-based incremental updates
+- Integration with Claude Code, Gemini CLI, Codex, OpenCode, and more
+
+> For usage in context management, see [Week 5 lecture](/en/weeks/week-05).
+
+---
+
 ### Ollama
 
 Local and cloud LLM deployment tool. Run models with a single command, with NVIDIA cloud GPU remote inference support.
