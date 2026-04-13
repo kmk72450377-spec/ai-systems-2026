@@ -81,6 +81,33 @@ import { Aside, Steps, Badge, Card, CardGrid } from '@astrojs/starlight/componen
 
 마지막 발견이 특히 중요하다. 논리적 순서로 배치하면 모델이 "이미 앞에서 봤으니 뒤는 대충 읽어도 된다"고 판단하는 경향이 있다. 섞으면 매 위치에서 주의를 기울여야 하므로 오히려 정확도가 올라간다.
 
+#### 왜 발생하는가 — 3가지 복합 메커니즘
+
+Chroma 연구가 **얼마나** 나빠지는지를 보여줬다면, 후속 연구는 **왜** 나빠지는지를 밝혀냈다. 세 가지 메커니즘이 서로를 증폭시킨다:
+
+| 메커니즘 | 설명 | 스케일링 |
+|----------|------|---------|
+| **Lost-in-the-middle** | 컨텍스트 중간에 위치한 정보가 시작/끝보다 검색 정확도 낮음 | 위치 의존 |
+| **Attention dilution** | 컨텍스트가 길어질수록 각 토큰이 받는 attention 비중 감소 | **이차(quadratic)** — 길이 2배 → 희석 4배 |
+| **Distractor interference** | 관련 없는 정보가 관련 정보에 대한 추론을 **능동적으로** 방해 | 노이즈 비율에 비례 |
+
+<Aside type="note" title="MIT 기계적 분석 (2025)">
+MIT 연구진은 **causal masking**(이전 토큰만 참조)과 **RoPE 위치 인코딩 감쇠**가 position bias의 구조적 원인임을 밝혀냈다. 이것은 버그가 아니라 Transformer 아키텍처의 내재적 속성이다 — RoPE를 사용하는 모든 autoregressive 모델은 정도의 차이만 있을 뿐 mid-window 정확도 저하를 보인다.
+</Aside>
+
+#### MECW — 실효 최대 컨텍스트 창
+
+이 연구에서 나온 중요한 개념: **MECW (Maximum Effective Context Window)** — 모델의 in-context 정보 정확도가 사용 가능한 수준 이하로 떨어지는 지점. MECW ≠ 공칭 최대 컨텍스트. 벤치마크에서 최상위 모델도 공칭 한계 훨씬 이전에 정확도가 떨어지기 시작했다. 아래 표에서 실효 사용량이 60-70%인 이유가 바로 이것이다.
+
+<Aside type="tip" title="Chroma Context-1 — 연구에서 제품으로 (2026년 3월)">
+Chroma는 Context Rot 연구를 제품으로 전환했다: **Context-1**, 20B 파라미터 Mixture-of-Experts 아키텍처의 에이전틱 검색 모델이다.
+- **0.94 pruning accuracy** — 검색 중 무관한 문서를 정확히 식별·제거
+- frontier LLM 대비 **10배 빠르고 25배 저렴**
+- **Self-editing context**: 모델이 추론 중 자신의 컨텍스트를 능동적으로 가지치기
+
+Compaction(사후 압축)이 아니라 **아키텍처 수준에서 Context Rot을 방지**하는 접근법이다.
+</Aside>
+
 #### 1M 토큰 시대 — 큰 창이 해결책인가?
 
 2026년 기준 frontier 모델의 컨텍스트 창:
@@ -97,12 +124,18 @@ import { Aside, Steps, Badge, Card, CardGrid } from '@astrojs/starlight/componen
 1M 토큰 창을 가진 모델도 Chroma 연구에서 동일한 패턴을 보였다. 창이 크면 **더 많은 정보를 넣을 수 있지만**, 넣을수록 중간 위치의 정확도가 떨어진다. 큰 창은 Context Rot의 해법이 아니라, **Context Rot이 발생할 공간이 더 넓어지는 것**이다.
 </Aside>
 
+<Aside type="caution" title="기업 데이터가 뒷받침한다">
+2025년 기업 AI 실패의 <strong>65%</strong>가 다단계 추론 중 컨텍스트 드리프트와 기억 상실에서 비롯되었다 — 컨텍스트 공간 부족이 아니라 <strong>주의력 분산</strong>이 문제다.
+</Aside>
+
 <Aside type="tip" title="Claude Code 내부에서는...">
 Claude Code는 Context Rot 방지를 위해 **auto-compaction**을 내장하고 있다:
 
-- **트리거**: 컨텍스트가 모델 최대의 **~75%에 도달**하면 자동 압축 (`compact-2026-01-12` beta API). 턴 수가 아닌 **토큰 기반** 트리거
+- **트리거**: 컨텍스트가 **~33K 토큰에 도달**하면 자동 압축 (v2.1.x에서 45K→33K로 하향 조정, 더 조기에 트리거). 턴 수가 아닌 **토큰 기반** 트리거
 - **알고리즘**: 최근 4개 메시지 보존 + 나머지를 Markdown→plaintext 변환, 중복 도구 결과 제거
 - **CLAUDE.md 3레벨 계층**: `~/.claude/CLAUDE.md`(전역) → `<project>/.claude/CLAUDE.md`(프로젝트) → `<workspace>/CLAUDE.md`(로컬). 전체 합산 12,000자 제한
+- **Auto-memory (MEMORY.md)**: v2.1.59+에서 도입된 세션 간 자동 기억 시스템. 프로젝트별 학습된 사실(디버깅 패턴, 선호 방식 등)을 `MEMORY.md`에 축적. 첫 200줄이 세션 시작 시 자동 로드. CLAUDE.md(규칙)과 MEMORY.md(학습된 사실)는 상호 보완적
+- **서브에이전트 격리**: Agent 도구로 생성된 서브에이전트는 **빈 컨텍스트**에서 시작. 부모의 대화 히스토리를 상속하지 않으며, 필요한 정보는 부모가 프롬프트에 명시적으로 전달해야 한다
 - **토큰 추적**: input/cache_creation/cache_read/output 4종 토큰을 매 API 호출마다 기록. `/cost`로 실시간 확인
 - **수동 트리거**: `/compact` 명령으로 즉시 압축 실행 가능
 
@@ -126,6 +159,20 @@ auto-compaction이 작동할 때, **보존 우선순위**가 결정적이다:
 - 요약 자체가 원본의 50% 이상인 경우 (압축 효율이 없음)
 
 이것이 4주차에서 Huntley가 "fresh context"를 선택한 이유다 — 루프 간에는 compaction보다 **완전 초기화 + 상태 파일 전달**이 더 결정론적이다.
+
+#### 휴리스틱을 넘어서 — ACON 압축 프레임워크
+
+현재 compaction 전략(Claude Code 포함)은 **휴리스틱 기반**이다 — "최근 4개 보존", "나머지 요약" 같은 규칙. ACON (Agent Context Optimization, arXiv:2510.00615, 2025년 10월)은 압축을 **정형 최적화 문제**로 접근한다:
+
+| 지표 | 결과 |
+|------|------|
+| 피크 토큰 절감 | **26-54%** |
+| 정확도 유지 | **95%+** |
+| 방식 | gradient-free, API 호환 (어떤 모델이든 API로 사용 가능) |
+
+ACON의 핵심 통찰: 고정 규칙 대신, 각 컨텍스트 세그먼트가 **현재 태스크에 기여하는 정도**를 동적으로 채점하고 임계값 이하를 제거한다. "항상 최근 4개 보존"(휴리스틱)과 "현재 태스크에 가장 관련 있는 메시지 보존"(최적화)의 차이다.
+
+현재 Claude Code는 휴리스틱을 사용하지만, ACON은 이 분야의 발전 방향을 보여준다 — 규칙 기반에서 최적화 기반 compaction으로의 전환.
 
 ### Ralph 루프의 해법: Context Window Wiping
 
@@ -208,8 +255,8 @@ class RalphContextManager:
 | 태스크 유형 | 비중 | 권장 모델 | 비용 (1M 토큰) |
 |------------|------|----------|---------------|
 | 단순 조회, 포맷팅, 타입 확인 | 60-70% | **Haiku** | $1 / $5 |
-| 표준 코딩, 버그 수정, 기능 추가 | 25-30% | **Sonnet** | $15 / $75 |
-| 아키텍처 설계, 복잡한 디버깅 | 5-10% | **Opus** | $15 / $75 |
+| 표준 코딩, 버그 수정, 기능 추가 | 25-30% | **Sonnet** | $3 / $15 |
+| 아키텍처 설계, 복잡한 디버깅 | 5-10% | **Opus** | $5 / $25 |
 
 모델 라우팅만으로 **5-8배 비용 절감**이 가능하다. Claude Code의 `effort` 파라미터(4주차 참조)가 이 라우팅의 제품화된 형태다.
 
@@ -311,6 +358,20 @@ Initializer 패턴이 단일 태스크의 상태를 관리한다면, **LLM Wiki 
 
 이 접근법은 LLM Wiki 패턴과 결합할 수 있다: Graphify로 코드베이스의 구조를 그래프화하고, LLM Wiki로 그 위에 인사이트와 결정 사항을 축적한다.
 
+#### LazyGraphRAG — 대규모 배포를 위한 경량 그래프 검색
+
+Graphify가 단일 코드베이스를 로컬에서 그래프화한다면, Microsoft의 **LazyGraphRAG**는 엔터프라이즈 규모의 문서에 그래프 기반 검색을 적용한다:
+
+| 지표 | LazyGraphRAG vs Full GraphRAG |
+|------|-------------------------------|
+| 인덱싱 비용 | **0.1%** (1/1000) |
+| 쿼리 비용 | **4%** (1/25) |
+| 품질 | 벡터 RAG, RAPTOR 등 경쟁 기법 대비 우위 |
+
+LazyGraphRAG는 사전 요약 없이 lazy evaluation으로 그래프를 구축하여, 1M 토큰 컨텍스트 창보다도 우수한 검색 품질을 달성한다. Microsoft Discovery(Azure)에 실전 배포되어 있다.
+
+Graphify(로컬 코드베이스, 개인 사용) vs LazyGraphRAG(대규모 문서, 엔터프라이즈) — 비용-품질 스펙트럼의 두 지점이다.
+
 ---
 
 ### 도구별 컨텍스트 전략 비교
@@ -322,11 +383,39 @@ Initializer 패턴이 단일 태스크의 상태를 관리한다면, **LLM Wiki 
 | **Explicit** | Cursor | 사용자가 컨텍스트에 넣을 파일을 직접 선택 | 정밀한 제어, 토큰 낭비 최소 | 수동 노동, 누락 리스크 |
 | **Ambient** | Windsurf (Cascade) | 도구가 자동으로 관련 파일 탐지 | 편리, 누락 방지 | 과다 포함, 토큰 낭비 리스크 |
 | **Hybrid** | Claude Code | 파일 기반 영속(CLAUDE.md) + 자동 압축 | 균형, 루프 친화적 | 설정 필요, 학습 곡선 |
+| **Tiered** | GitHub Copilot | 3계층 메모리(user/repo/session) + Agent Mode | VS Code UX 친숙, 28일 자동 메모리 | VS Code 중심, CLI 제어 제한 |
+| **Sandboxed** | Codex CLI | 컨테이너 격리 + AGENTS.md | 안전한 실행, 도구 중립 | MCP 미지원, 컨텍스트 192K 제한 |
+| **Large-window** | Gemini CLI | 1M 컨텍스트 + GEMINI.md | 무료 티어, 최대 컨텍스트 | 생태계 신규, 도구 연동 적음 |
+| **Autonomous** | Devin | 전체 자율 세션 | 엔드투엔드 자동화 | ~35분/10 ACU 후 성능 저하 |
 
 VS Code Copilot은 2026년에 **3계층 메모리**(user/repository/session)를 도입하여, 사용자 선호(전역) → 프로젝트 규칙(레포) → 현재 대화(세션)를 분리했다. Claude Code의 CLAUDE.md 3레벨 계층(전역/프로젝트/로컬)과 동일한 설계 원리다.
 
-<Aside type="note" title="6주차로의 다리">
-어떤 컨텍스트 전략을 선택하든, 최종적으로 **컨텍스트 안에 무엇을 넣느냐**가 품질을 결정한다. 다음 주(6주차)에서 다루는 **인스트럭션 튜닝**은 바로 이 질문에 답한다 — CLAUDE.md에 어떤 제약을 어떻게 작성할 것인가.
+<Aside type="note" title="프로토콜 컨텍스트: MCP vs A2A">
+위 도구들은 **단일 에이전트**가 도구·파일과 상호작용하는 방식이다. 7주차에서는 **A2A 프로토콜**(Google, 2025)이 에이전트 간 컨텍스트 공유를 어떻게 해결하는지 다룬다 — MCP(에이전트↔도구)와 A2A(에이전트↔에이전트)는 상호보완적이다.
+</Aside>
+
+#### 인스트럭션 파일 수렴 — 업계가 파일 기반 컨텍스트를 검증하다
+
+2025-2026년에 주목할 트렌드: **모든 주요 AI 코딩 도구가 독립적으로 파일 기반 컨텍스트 관리에 수렴**했다. 경쟁하는 거의 모든 것에서 다르지만, 컨텍스트 관리 아키텍처만큼은 같은 결론에 도달했다:
+
+| 도구 | 인스트럭션 파일 | 계층 구조 |
+|------|---------------|----------|
+| **Claude Code** | `CLAUDE.md` | 3레벨: `~/.claude/`(전역) → `project/.claude/`(프로젝트) → `workspace/`(로컬) |
+| **OpenAI Codex CLI** | `AGENTS.md` | 디렉토리 트리 계층적 탐색 (가장 가까운 파일 우선) |
+| **Google Gemini CLI** | `GEMINI.md` | 프로젝트 루트 |
+| **Cursor** | `.cursor/rules/*.mdc` | Glob 패턴으로 스코프 지정 |
+| **GitHub Copilot** | `.github/copilot-instructions.md` | 단일 파일 + 28일 자동 메모리 |
+| **Windsurf** | Cascade Memories | 사용 패턴에서 자동 생성 |
+
+<Aside type="tip" title="이 수렴이 컨텍스트 관리에 중요한 이유">
+이 수렴은 **"설정 파일을 영구 컨텍스트로"** 패러다임을 검증한다. 모델이 세션 내에서 모든 것을 기억하는 것에 의존하는 대신, 결정론적이고 버전 관리 가능한 파일로 컨텍스트를 외부화한다. 이것은 이번 주에 배운 상태 추적 파일(`fix_plan.md`, `claude-progress.txt`)과 동일한 원리다 — 다만 태스크 상태가 아닌 행동 규칙에 적용된 것이다.
+
+이 수렴은 설계 스펙트럼도 드러낸다:
+- **수동 영속**: 개발자가 직접 작성·유지 (Cursor rules, CLAUDE.md)
+- **자동 생성 영속**: 도구가 학습하여 작성 (Windsurf Cascade Memories, Copilot auto-memory)
+- **하이브리드**: 개발자가 규칙 작성, 도구가 사실 학습 (Claude Code의 CLAUDE.md + MEMORY.md)
+
+→ 6주차에서 이 파일들에 **무엇을** 쓸지 다룬다. 이번 주의 초점은 **왜 존재하는가** — 컨텍스트 관리 전략으로서의 역할이다.
 </Aside>
 
 ---
@@ -380,6 +469,7 @@ users[3]{id,name,email}:
 3. CLAUDE.md를 **200줄 이하로 유지하라**는 조언의 근거는 무엇인가? SkillReducer의 "less-is-more" 효과와 연결하여 설명하라.
 4. Chroma 연구에서 **섞인 문서가 정렬된 문서보다 정확도가 높은** 이유를 추론하라. 이것이 컨텍스트 설계에 주는 시사점은?
 5. Initializer 패턴에서 feature list를 **JSON으로 쓰는 이유**는 무엇인가? Markdown으로 쓰면 어떤 문제가 생기는가?
+6. **MECW(실효 최대 컨텍스트 창)는 항상 공칭 최대보다 작다.** 기업 AI 실패의 65%가 다단계 추론 중 컨텍스트 드리프트에서 비롯된다면, 에이전트 세션을 어떻게 설계해야 하는가? "스프린트" 패턴(5-10 메시지 짧은 상호작용 + 새 컨텍스트)과 연결하여 논하라.
 
 ---
 
@@ -446,7 +536,9 @@ users[3]{id,name,email}:
 5. **토큰 40-70%가 낭비** — 모델 라우팅(Haiku 60-70%), prompt caching(read 0.1x), CLAUDE.md 200줄 이하로 절감.
 6. **Initializer 패턴** — JSON feature list + claude-progress.txt + init.sh 2-phase 구조로 상태를 결정론적으로 관리.
 7. **LLM Wiki 패턴** — 세션 단위 상태 파일을 넘어, LLM이 영구 지식 위키를 유지·관리하는 아키텍처. Ingest → Query → Lint 사이클로 지식을 축적.
-8. **지식 그래프 토큰 절감** — Graphify 같은 도구로 코드베이스를 그래프화하면 원본 대비 71.5배 토큰 절감 가능.
+8. **지식 그래프 토큰 절감** — Graphify 같은 도구로 코드베이스를 그래프화하면 원본 대비 71.5배 토큰 절감 가능. LazyGraphRAG는 엔터프라이즈 규모에서 GraphRAG 비용의 0.1%로 유사 품질 달성.
+9. **인스트럭션 파일 수렴** — 모든 주요 코딩 도구(Claude Code, Codex CLI, Gemini CLI, Cursor, Copilot, Windsurf)가 독립적으로 파일 기반 컨텍스트 영속에 수렴. 설정 파일이 세션 간 컨텍스트 관리의 보편적 해법.
+10. **MECW < 공칭 최대** — 실효 최대 컨텍스트 창은 항상 공칭보다 작다. 기업 실패의 65%는 컨텍스트 공간 부족이 아닌 컨텍스트 드리프트에서 비롯. 짧고 집중된 세션 설계가 핵심.
 
 ## 더 읽을거리
 
@@ -458,3 +550,8 @@ users[3]{id,name,email}:
 - [TOON Format Specification](https://github.com/toon-format/spec) — Token Oriented Object Notation, 균일 배열 토큰 최적화
 - [Karpathy: LLM Wiki — Building Persistent Knowledge Systems](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — LLM이 영구 지식 위키를 유지하는 패턴
 - [Graphify](https://github.com/safishamsi/graphify) — 코드베이스/문서를 지식 그래프로 변환, tree-sitter AST + Leiden 클러스터링, 71.5x 토큰 절감
+- [Chroma Context-1](https://www.trychroma.com/research/context-1) — 20B MoE 에이전틱 검색 모델, 0.94 pruning accuracy, self-editing context
+- [ACON: Agent Context Optimization (arXiv:2510.00615)](https://arxiv.org/abs/2510.00615) — 컨텍스트 압축을 정형 최적화로 접근, 26-54% 토큰 절감, 95%+ 정확도 유지
+- [LazyGraphRAG — Microsoft Research](https://www.microsoft.com/en-us/research/blog/lazygraphrag/) — GraphRAG 인덱싱 비용의 0.1%로 동등 품질, Azure Discovery 배포
+- [OpenAI Codex CLI — AGENTS.md](https://developers.openai.com/codex/guides/agents-md) — 도구 중립 계층적 인스트럭션 파일 표준
+- [A2A Protocol (Google, 2025)](https://github.com/a2aproject/A2A) — 에이전트 간 통신 프로토콜, MCP와 상호보완 (7주차에서 상세)
